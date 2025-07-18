@@ -1,1 +1,20 @@
 az group create --name my-rg --location east us ---> to create a resource group with location
+az network vnet create --resource-group myresource-rg --name demo-vnet --address-prefix 10.0.0.0/16 --subnet-name demosubnet --subnet-prefix 10.0.0.0/24---------. vnet with subnet
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
