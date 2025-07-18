@@ -21,6 +21,13 @@ az network vnet subnet update \
   --vnet-name myVNet \
   --name mySubnet \
   --network-security-group myNSG      ---> nsg attaches with subnet
+--------------------------------------------------------------------------------
+az network public-ip create --resource-group demo-rg --location eastus --name demo-ip1 --sku Standard --allocation-method Dynamic ----> creation of  Public ip
+
+az network nic create --resource-group demo-rg --location eastus --vnet-name demo-vnet --subnet demo-subnet ---> NIC creation
+
+az network nic ip-config update --resource-group demo-rg  --nic-name demo-nic  --name ipconfig1 --public-ip-address demo-ip--->NIC update 
+
 
 
 
