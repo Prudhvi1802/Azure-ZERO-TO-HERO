@@ -24,4 +24,10 @@ alias   --------->	Create shortcut for commands
 wget <link> ----> download the resources through the link
 curl <link> -----> to show the information in the link
 echo <text> -----> print the text
+grep <wordname> path(or)filename ----> search the word is present in the file 
+systemctl -----> command to check the serviec is active or not.
+  ---> systemctl start <servicename>   
+  ---> systemctl stop <servicename>      
+  ---> systemctl enable <servicename>    
+
 
