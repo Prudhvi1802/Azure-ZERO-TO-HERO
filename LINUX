@@ -1,2 +1,22 @@
 PWD-COmmand will show that the present working directiory in the linux system.
 MKDIR:-Create a directory like a folder
+CD:-Change directory 
+touch <filename> --->create a file
+cat <filename> --->view the contents in the file 
+vim <filename> --->open the file in editor mode and edit and more access
+rm <filename> --->remove file
+rm -r <dirname> ----->remove directory 
+cp <source> <destination>  ----> copy files 
+mv <source> <destination>  ----> move files from source to destination
+head <filename> ---------> show starting lines of file
+tail <filename> ---------> show ending lines of file
+adduser <username>	---------->  Add a user
+passwd <username>	----------> create a password for the username
+deluser <username>	---------->  Remove a user
+chmod  .......> change modifications
+    r (read) = 4
+    w (write) = 2
+    x (execute) = 1
+    no permissions = 0
+
+
