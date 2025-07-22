@@ -28,6 +28,27 @@ grep <wordname> path(or)filename ----> search the word is present in the file
 systemctl -----> command to check the serviec is active or not.
   ---> systemctl start <servicename>   
   ---> systemctl stop <servicename>      
-  ---> systemctl enable <servicename>    
+  ---> systemctl enable <servicename>   
+-JOURNALCTL ---> Command used to see the logs of the service 
+  journalctl -f -u <servicename>
+      where -f stands for follow mode &
+             u stands for unit mode .
+  journalctl --since "2025-07-22 16:00:00" --->used to get the logs form particular time and time
+--------------------------------------------------------------------
+NSLOOKUP: A command used to fetch/ query the records of DNS  
+   and also we can fetch the records of domains/subdomain of nameservers , text and mail excahnge
+Mail exchange (mx), text(txt), nameservers(ns)
+nslookup -query=mx ab.com --> we can know the mx of abc.com
+nslookup -query=txt ab.com --> we can know the text of abc.com
+nslookup -query=ns ab.com --> we can know the name servers of abc.com
+--------------------------------------------------------------------
+TIME :......>to know the command 
+DATE:    ..>To get the date 
+echo $(date "+%Y-%m-%d %H:%M:%S") 
+  where Y -year, m is month, d is day followed by H is hour, M is minutes, S is seconds
+setting time and date 
+   ----> date --set="20250801 12:12:58"
+
+
 
 
