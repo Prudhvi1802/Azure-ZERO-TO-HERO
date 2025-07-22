@@ -18,5 +18,10 @@ chmod  .......> change modifications
     w (write) = 2
     x (execute) = 1
     no permissions = 0
-
+sudo apt install <pkg>----------?	Install package
+sudo apt remove  <pkg>----------?	Install package
+alias   --------->	Create shortcut for commands
+wget <link> ----> download the resources through the link
+curl <link> -----> to show the information in the link
+echo <text> -----> print the text
 
