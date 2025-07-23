@@ -13,3 +13,20 @@ During this tenure my one of the key accomplishment is introduction of  Kubernet
 
 Overall, I’m passionate about DevOps because it lets me automate, improve systems, and help teams deliver better software faster.
 -----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+PROJECT:
+I'm currently working as a DevOps Engineer on a project for UBS, one of the top banking clients, through Tata Consultancy Services. The main goal of this project is to help the client move their applications to the cloud, automate deployments, improve system reliability, and reduce cloud costs.
+
+We use both Azure and AWS for cloud services, and I manage the infrastructure using Terraform. I’ve built reusable Terraform modules so we can set up environments like Dev, QA, and Prod faster and more consistently.
+
+On the CI/CD side, I’ve created pipelines using Jenkins and Azure DevOps that automate everything from code building to deployment. This helped the team push new updates much faster and with fewer errors.
+
+For running applications, we use Docker and deploy everything into Kubernetes clusters. I also helped optimize these clusters using Spot VMs and auto-scaling, which saved about 20% in cloud costs. I got a Star of the Month award for that work.
+
+Security is a big part of our job too. So, I integrated tools like SonarQube to check code quality, Trivy to scan Docker images for vulnerabilities, and OWASP ZAP to test for common security issues in our apps.
+
+To reduce manual work, I write scripts in Bash and Python to automate daily tasks. I also set up Prometheus and Grafana to monitor the system and send alerts if something goes wrong.
+
+I work closely with developers and testers in an Agile team, attend daily stand-ups, and help with incident handling when needed. Overall, the project has given me great experience in cloud, automation, security, and collaboration.
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+DAY TO DAY ACTIVITIES:
+
