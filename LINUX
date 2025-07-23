@@ -48,6 +48,26 @@ echo $(date "+%Y-%m-%d %H:%M:%S")
   where Y -year, m is month, d is day followed by H is hour, M is minutes, S is seconds
 setting time and date 
    ----> date --set="20250801 12:12:58"
+-------------------------------------------------------------------------
+HOSTNAME: by using hostnamectl command we can able to get the info anpout the host.
+hostnamectl set-hostname <name of the host> ----> we can able to create the hostname
+we can able to check the hostname in the path ...>cat etc/hostname
+-------------------------------------------------------------------------
+Package managers: Like APT
+Using apt or yum or dnf we can able to update the packages
+-------------------------------------------------------------------------
+FIND: find is a power ful command in the linux , which is used to find out the files or directories are present in the system or not.
+syntax: find <path> -name  *.log 
+        find <path> -type f -name document exec rm {}/;
+          where f for file
+                d for directory
+exec rm {}/; --> additional argument which removes the o/p "find <path> -type f -name document"
+-------------------------------------------------------------------------
+
+
+-------------------------------------------------------------------------
+
+
 
 
 
