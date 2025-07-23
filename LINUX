@@ -63,7 +63,52 @@ syntax: find <path> -name  *.log
                 d for directory
 exec rm {}/; --> additional argument which removes the o/p "find <path> -type f -name document"
 -------------------------------------------------------------------------
+AWK : It is one of the most powerful tool in the linux system, which is used for the text processing.
+awk '{print $1}' demo.txt
+example: if you want to list out the files or PID for the particualr condition. then AWK command will be more useful
+ex:root@caleston-lp10:~# ps
+  PID TTY          TIME CMD
+ 1478 pts/0    00:00:00 sudo
+ 1483 pts/0    00:00:00 su
+ 1507 pts/0    00:00:00 sudo
+ 1509 pts/0    00:00:00 su
+ 1510 pts/0    00:00:00 bash
+ 1543 pts/0    00:00:00 ps
+root@caleston-lp10:~# ps | awk '{print $1}' |head -5
+PID
+1478
+1483
+1507
+1509
+-------------------------------------------------------------------------
+SYSTEM USER: A non -human or linux user that we created to run the automatic tasks or crontab task in the system
+ex: sudo useradd -r <username>  ----> creation of system user
+    sudo useradd  <username>  ----> creation of  user
+cat /etc/hosts  --> data related to hosts
+cat etc/passwd   ---> data related to the users and their data
+-------------------------------------------------------------------------
 
+-------------------------------------------------------------------------
+
+-------------------------------------------------------------------------
+
+-------------------------------------------------------------------------
+
+-------------------------------------------------------------------------
+
+-------------------------------------------------------------------------
+
+-------------------------------------------------------------------------
+
+-------------------------------------------------------------------------
+
+-------------------------------------------------------------------------
+
+-------------------------------------------------------------------------
+
+-------------------------------------------------------------------------
+
+-------------------------------------------------------------------------
 
 -------------------------------------------------------------------------
 
