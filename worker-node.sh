@@ -2,7 +2,7 @@
 #############################################
 # Kubernetes Worker Node Setup Script
 # Run this ONLY on worker nodes
-# Ubuntu 20.04/22.04 LTS
+# Ubuntu 25.04 LTS
 #############################################
 
 set -e
@@ -27,6 +27,21 @@ print_info "=========================================="
 if [ "$EUID" -ne 0 ]; then 
     print_error "Please run as root (use sudo)"
     exit 1
+fi
+
+# Check Ubuntu version
+print_info "Checking Ubuntu version..."
+if [ -f /etc/os-release ]; then
+    . /etc/os-release
+    print_info "OS: $NAME $VERSION"
+    if [[ "$VERSION_ID" != "25.04" ]]; then
+        print_warning "This script is optimized for Ubuntu 25.04"
+        print_warning "Current version: $VERSION_ID"
+        read -p "Continue anyway? (yes/no): " CONTINUE
+        if [ "$CONTINUE" != "yes" ]; then
+            exit 1
+        fi
+    fi
 fi
 
 # Check if prerequisites are installed
@@ -94,4 +109,3 @@ print_info "  kubectl get pods --all-namespaces"
 print_info ""
 
 print_success "Worker node setup completed successfully!"
-
