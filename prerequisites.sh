@@ -2,7 +2,7 @@
 #############################################
 # Kubernetes Prerequisites Setup Script
 # Run this on BOTH master and worker nodes
-# Ubuntu 20.04/22.04 LTS
+# Ubuntu 25.04 LTS
 #############################################
 
 set -e
@@ -54,6 +54,19 @@ fi
 
 print_info "System: $(lsb_release -d | cut -f2)"
 print_info "Kernel: $(uname -r)"
+
+# Verify Ubuntu version
+if [ -f /etc/os-release ]; then
+    . /etc/os-release
+    if [[ "$VERSION_ID" != "25.04" ]]; then
+        print_warning "This script is optimized for Ubuntu 25.04"
+        print_warning "Current version: $VERSION_ID"
+        read -p "Continue anyway? (yes/no): " CONTINUE
+        if [ "$CONTINUE" != "yes" ]; then
+            exit 1
+        fi
+    fi
+fi
 
 # Update system
 print_info "Updating system packages..."
@@ -159,4 +172,3 @@ print_info "Next steps:"
 print_info "  - On MASTER node: Run ./setup-master-node.sh"
 print_info "  - On WORKER node: Run ./setup-worker-node.sh <join-command>"
 print_info ""
-
