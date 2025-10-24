@@ -1,219 +1,394 @@
 #!/bin/bash
-# Production-ready Kubernetes cluster setup for Java Microservices
-# This script sets up a complete Kubernetes environment for Java microservices
-# with GitHub Container Registry integration and production-ready configurations.
+#############################################
+# Kubernetes Master Node Setup Script
+# Run this ONLY on the master/control plane node
+# Ubuntu 25.04 LTS
+# Uses kubeadm for multi-VM cluster setup
+# CNI: Calico (192.168.0.0/16)
+#############################################
 
 set -e
 
-# Colors for output
+# Colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 CYAN='\033[0;36m'
-NC='\033[0m' # No Color
+BLUE='\033[0;34m'
+NC='\033[0m'
 
 function print_success() { echo -e "${GREEN}✓ $1${NC}"; }
 function print_info() { echo -e "${CYAN}ℹ $1${NC}"; }
 function print_warning() { echo -e "${YELLOW}⚠ $1${NC}"; }
 function print_error() { echo -e "${RED}✗ $1${NC}"; }
+function print_header() { echo -e "${BLUE}━━━ $1 ━━━${NC}"; }
 
-# Parse arguments
-GITHUB_TOKEN="${GITHUB_TOKEN:-}"
-GITHUB_USERNAME="${GITHUB_USERNAME:-}"
-CLUSTER_TYPE="${1:-minikube}"
+# Logging
+LOG_FILE="/var/log/k8s-master-setup.log"
+exec 1> >(tee -a "$LOG_FILE")
+exec 2>&1
 
-print_info "=========================================="
-print_info "Kubernetes Cluster Setup for Java Microservices"
-print_info "=========================================="
+print_header "Kubernetes Master Node Setup"
+print_info "Timestamp: $(date)"
+print_info "Hostname: $(hostname)"
+print_info "Log file: $LOG_FILE"
+echo ""
 
-# Validate prerequisites
+#############################################
+# Configuration
+#############################################
+K8S_VERSION="1.28"
+POD_NETWORK_CIDR="192.168.0.0/16"
+CALICO_VERSION="v3.27.0"
+JOIN_COMMAND_FILE="/tmp/join-command.sh"
+
+#############################################
+# Pre-flight Checks
+#############################################
+print_header "Pre-flight Checks"
+
+# Check if running as root
+if [ "$EUID" -ne 0 ]; then 
+    print_error "Please run as root (use sudo)"
+    exit 1
+fi
+print_success "Running as root"
+
+# Check Ubuntu version
+print_info "Checking Ubuntu version..."
+if [ -f /etc/os-release ]; then
+    . /etc/os-release
+    print_info "OS: $NAME $VERSION"
+    if [[ "$VERSION_ID" != "25.04" ]]; then
+        print_warning "This script is optimized for Ubuntu 25.04"
+        print_warning "Current version: $VERSION_ID"
+        read -p "Continue anyway? (yes/no): " CONTINUE
+        if [ "$CONTINUE" != "yes" ]; then
+            exit 1
+        fi
+    fi
+else
+    print_warning "Could not detect OS version"
+fi
+
+# Check if prerequisites are installed
 print_info "Checking prerequisites..."
 
 check_command() {
     if command -v $1 &> /dev/null; then
-        print_success "$1 is installed"
+        print_success "$1 is installed ($(which $1))"
         return 0
     else
-        print_error "$1 is not installed. Please install it first."
+        print_error "$1 is not installed"
         return 1
     fi
 }
 
-check_command kubectl || exit 1
-check_command docker || exit 1
+PREREQ_OK=true
+check_command kubeadm || PREREQ_OK=false
+check_command kubelet || PREREQ_OK=false
+check_command kubectl || PREREQ_OK=false
+check_command containerd || PREREQ_OK=false
 
-if [ "$CLUSTER_TYPE" == "minikube" ]; then
-    check_command minikube || exit 1
-elif [ "$CLUSTER_TYPE" == "kind" ]; then
-    check_command kind || exit 1
-fi
-
-# Setup cluster based on type
-if [ "$CLUSTER_TYPE" == "minikube" ]; then
-    print_info "Setting up Minikube cluster..."
-    
-    # Check if minikube is running
-    if ! minikube status &> /dev/null; then
-        print_info "Starting Minikube cluster..."
-        minikube start --cpus=4 --memory=8192 --driver=docker --kubernetes-version=stable
-    else
-        print_success "Minikube is already running"
-    fi
-    
-    # Enable addons
-    print_info "Enabling Minikube addons..."
-    minikube addons enable ingress
-    minikube addons enable metrics-server
-    print_success "Minikube addons enabled"
-    
-elif [ "$CLUSTER_TYPE" == "kind" ]; then
-    print_info "Setting up Kind cluster..."
-    
-    # Check if cluster exists
-    if ! kind get clusters 2>&1 | grep -q "ajwa-services"; then
-        print_info "Creating Kind cluster..."
-        
-        # Create kind config
-        cat <<EOF > kind-config.yaml
-kind: Cluster
-apiVersion: kind.x-k8s.io/v1alpha4
-nodes:
-- role: control-plane
-  kubeadmConfigPatches:
-  - |
-    kind: InitConfiguration
-    nodeRegistration:
-      kubeletExtraArgs:
-        node-labels: "ingress-ready=true"
-  extraPortMappings:
-  - containerPort: 80
-    hostPort: 80
-    protocol: TCP
-  - containerPort: 443
-    hostPort: 443
-    protocol: TCP
-- role: worker
-- role: worker
-EOF
-        
-        kind create cluster --name ajwa-services --config kind-config.yaml
-        rm kind-config.yaml
-        print_success "Kind cluster created"
-        
-        # Install ingress controller
-        print_info "Installing NGINX Ingress Controller..."
-        kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/kind/deploy.yaml
-        sleep 10
-    else
-        print_success "Kind cluster already exists"
-        kubectl cluster-info --context kind-ajwa-services
-    fi
-else
-    print_info "Using existing cluster..."
-    kubectl cluster-info
-fi
-
-# Verify cluster is accessible
-print_info "Verifying cluster connectivity..."
-if kubectl get nodes &> /dev/null; then
-    print_success "Cluster is accessible"
-else
-    print_error "Cannot access cluster. Please check your kubeconfig."
+if [ "$PREREQ_OK" = false ]; then
+    print_error "Prerequisites not installed. Please run prerequisites.sh first"
     exit 1
 fi
 
-# Create namespace
-print_info "Creating namespace..."
-kubectl apply -f k8s/namespace.yaml
-print_success "Namespace created"
+# Check system resources
+print_info "Checking system resources..."
+TOTAL_CPU=$(nproc)
+TOTAL_MEM_MB=$(free -m | awk '/^Mem:/{print $2}')
 
-# Create GitHub Container Registry secret if credentials provided
-if [ -n "$GITHUB_TOKEN" ] && [ -n "$GITHUB_USERNAME" ]; then
-    print_info "Creating GitHub Container Registry secret..."
-    
-    kubectl create secret docker-registry ghcr-secret \
-        --docker-server=ghcr.io \
-        --docker-username=$GITHUB_USERNAME \
-        --docker-password=$GITHUB_TOKEN \
-        --docker-email=$GITHUB_USERNAME@users.noreply.github.com \
-        --namespace=ajwa-services \
-        --dry-run=client -o yaml | kubectl apply -f -
-    
-    print_success "GitHub Container Registry secret created"
+if [ "$TOTAL_CPU" -lt 2 ]; then
+    print_warning "Recommended CPU cores: 2+, Available: $TOTAL_CPU"
 else
-    print_warning "GitHub credentials not provided. Skipping registry secret creation."
-    print_warning "Set GITHUB_TOKEN and GITHUB_USERNAME environment variables."
+    print_success "CPU cores: $TOTAL_CPU"
 fi
 
-# Apply RBAC configurations
-print_info "Applying RBAC configurations..."
-kubectl apply -f k8s/rbac.yaml
-print_success "RBAC configurations applied"
-
-# Apply ConfigMaps
-print_info "Applying ConfigMaps..."
-kubectl apply -f k8s/configmap.yaml
-print_success "ConfigMaps applied"
-
-# Deploy microservices
-print_info "Deploying microservices..."
-kubectl apply -f k8s/deployments/
-print_success "Microservices deployed"
-
-# Create services
-print_info "Creating services..."
-kubectl apply -f k8s/services/
-print_success "Services created"
-
-# Apply Ingress
-if [ -f "k8s/ingress.yaml" ]; then
-    print_info "Applying Ingress configuration..."
-    kubectl apply -f k8s/ingress.yaml
-    print_success "Ingress configured"
+if [ "$TOTAL_MEM_MB" -lt 4096 ]; then
+    print_warning "Recommended memory: 4GB+, Available: ${TOTAL_MEM_MB}MB"
+else
+    print_success "Memory: ${TOTAL_MEM_MB}MB"
 fi
 
-# Apply monitoring
-if [ -d "k8s/monitoring/" ]; then
-    print_info "Setting up monitoring..."
-    kubectl apply -f k8s/monitoring/
-    print_success "Monitoring configured"
+# Check if swap is disabled
+if [ "$(swapon -s | wc -l)" -gt 1 ]; then
+    print_error "Swap is enabled. Kubernetes requires swap to be disabled."
+    print_info "Run: sudo swapoff -a && sudo sed -i '/ swap / s/^/#/' /etc/fstab"
+    exit 1
+fi
+print_success "Swap is disabled"
+
+# Check if cluster already initialized
+if [ -f /etc/kubernetes/admin.conf ]; then
+    print_warning "Kubernetes cluster already initialized on this node"
+    read -p "Do you want to reset and reinitialize? (yes/no): " RESET_CHOICE
+    if [ "$RESET_CHOICE" = "yes" ]; then
+        print_info "Resetting cluster..."
+        kubeadm reset -f
+        rm -rf /etc/kubernetes /var/lib/etcd ~/.kube
+        print_success "Cluster reset complete"
+    else
+        print_info "Exiting without changes"
+        exit 0
+    fi
 fi
 
-# Wait for deployments to be ready
-print_info "Waiting for deployments to be ready..."
-kubectl wait --for=condition=available --timeout=300s deployment --all -n ajwa-services
-print_success "All deployments are ready"
+#############################################
+# Network Configuration
+#############################################
+print_header "Network Configuration"
 
-# Display cluster information
-print_info ""
-print_info "=========================================="
-print_success "Kubernetes Cluster Setup Complete!"
-print_info "=========================================="
-print_info ""
+# Get the node IP address
+NODE_IP=$(hostname -I | awk '{print $1}')
+print_info "Master Node IP: $NODE_IP"
+print_info "Master Node Hostname: $(hostname)"
+
+# Validate IP
+if [[ ! $NODE_IP =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+    print_error "Could not detect valid IP address"
+    read -p "Please enter master node IP manually: " NODE_IP
+fi
+
+print_info "Using IP: $NODE_IP for API server"
+
+#############################################
+# Initialize Kubernetes Cluster
+#############################################
+print_header "Initializing Kubernetes Cluster"
+
+print_info "Running kubeadm init..."
+print_info "This may take a few minutes..."
+
+kubeadm init \
+    --pod-network-cidr=$POD_NETWORK_CIDR \
+    --apiserver-advertise-address=$NODE_IP \
+    --control-plane-endpoint=$NODE_IP:6443 \
+    --kubernetes-version=stable-${K8S_VERSION} \
+    --upload-certs \
+    --v=5
+
+print_success "Kubernetes cluster initialized successfully!"
+
+#############################################
+# Configure kubectl for root
+#############################################
+print_header "Configuring kubectl"
+
+print_info "Setting up kubectl for root user..."
+mkdir -p /root/.kube
+cp -f /etc/kubernetes/admin.conf /root/.kube/config
+chown root:root /root/.kube/config
+print_success "kubectl configured for root"
+
+# Configure for regular user if SUDO_USER exists
+if [ -n "$SUDO_USER" ] && [ "$SUDO_USER" != "root" ]; then
+    print_info "Setting up kubectl for user: $SUDO_USER..."
+    USER_HOME=$(eval echo ~$SUDO_USER)
+    sudo -u $SUDO_USER mkdir -p $USER_HOME/.kube
+    cp -f /etc/kubernetes/admin.conf $USER_HOME/.kube/config
+    chown $SUDO_USER:$SUDO_USER $USER_HOME/.kube/config
+    print_success "kubectl configured for $SUDO_USER"
+fi
+
+# Verify kubectl access
+print_info "Verifying kubectl access..."
+if kubectl get nodes &> /dev/null; then
+    print_success "kubectl is working correctly"
+else
+    print_error "kubectl access failed"
+    exit 1
+fi
+
+#############################################
+# Install Calico CNI
+#############################################
+print_header "Installing Calico CNI"
+
+print_info "Downloading Calico operator..."
+kubectl create -f https://raw.githubusercontent.com/projectcalico/calico/${CALICO_VERSION}/manifests/tigera-operator.yaml
+
+print_info "Waiting for Tigera operator to be ready..."
+sleep 10
+
+print_info "Creating Calico custom resources..."
+cat <<EOF | kubectl apply -f -
+apiVersion: operator.tigera.io/v1
+kind: Installation
+metadata:
+  name: default
+spec:
+  calicoNetwork:
+    ipPools:
+    - blockSize: 26
+      cidr: ${POD_NETWORK_CIDR}
+      encapsulation: VXLANCrossSubnet
+      natOutgoing: Enabled
+      nodeSelector: all()
+---
+apiVersion: operator.tigera.io/v1
+kind: APIServer
+metadata:
+  name: default
+spec: {}
+EOF
+
+print_success "Calico installation started"
+
+print_info "Waiting for Calico pods to be ready (this may take 2-3 minutes)..."
+sleep 30
+
+# Wait for calico-system namespace
+TIMEOUT=180
+ELAPSED=0
+while [ $ELAPSED -lt $TIMEOUT ]; do
+    if kubectl get namespace calico-system &> /dev/null; then
+        print_success "Calico namespace created"
+        break
+    fi
+    sleep 5
+    ELAPSED=$((ELAPSED + 5))
+done
+
+# Wait for Calico pods
+print_info "Waiting for Calico pods to be running..."
+kubectl wait --for=condition=Ready pods --all -n calico-system --timeout=300s || true
+kubectl wait --for=condition=Ready pods --all -n tigera-operator --timeout=300s || true
+
+print_success "Calico CNI installed successfully!"
+
+#############################################
+# Wait for Master Node to be Ready
+#############################################
+print_header "Waiting for Master Node"
+
+print_info "Waiting for master node to be Ready..."
+TIMEOUT=300
+ELAPSED=0
+while [ $ELAPSED -lt $TIMEOUT ]; do
+    NODE_STATUS=$(kubectl get nodes -o jsonpath='{.items[0].status.conditions[?(@.type=="Ready")].status}')
+    if [ "$NODE_STATUS" = "True" ]; then
+        print_success "Master node is Ready!"
+        break
+    fi
+    echo -n "."
+    sleep 5
+    ELAPSED=$((ELAPSED + 5))
+done
+
+if [ "$NODE_STATUS" != "True" ]; then
+    print_warning "Master node not ready yet, but continuing..."
+fi
+
+#############################################
+# Generate Join Command
+#############################################
+print_header "Generating Worker Join Command"
+
+print_info "Creating join token (valid for 24 hours)..."
+JOIN_COMMAND=$(kubeadm token create --print-join-command)
+
+# Save to file
+echo "#!/bin/bash" > $JOIN_COMMAND_FILE
+echo "# Generated on: $(date)" >> $JOIN_COMMAND_FILE
+echo "# Master Node: $NODE_IP" >> $JOIN_COMMAND_FILE
+echo "# Valid for: 24 hours" >> $JOIN_COMMAND_FILE
+echo "" >> $JOIN_COMMAND_FILE
+echo "$JOIN_COMMAND" >> $JOIN_COMMAND_FILE
+chmod +x $JOIN_COMMAND_FILE
+
+print_success "Join command generated and saved to: $JOIN_COMMAND_FILE"
+
+#############################################
+# Untaint Master (Optional)
+#############################################
+print_header "Master Node Configuration"
+
+read -p "Allow pods to be scheduled on master node? (yes/no) [default: no]: " UNTAINT_MASTER
+if [ "$UNTAINT_MASTER" = "yes" ]; then
+    print_info "Removing master node taint..."
+    kubectl taint nodes --all node-role.kubernetes.io/control-plane- || true
+    kubectl taint nodes --all node-role.kubernetes.io/master- || true
+    print_success "Master node can now schedule pods"
+else
+    print_info "Master node will only run control plane components (recommended)"
+fi
+
+#############################################
+# Final Verification
+#############################################
+print_header "Cluster Status Verification"
 
 print_info "Cluster Information:"
 kubectl cluster-info
 
-print_info ""
-print_info "Deployed Resources:"
-kubectl get all -n ajwa-services
+echo ""
+print_info "Node Status:"
+kubectl get nodes -o wide
 
-print_info ""
-print_info "Ingress Status:"
-kubectl get ingress -n ajwa-services
+echo ""
+print_info "System Pods Status:"
+kubectl get pods --all-namespaces -o wide
 
-if [ "$CLUSTER_TYPE" == "minikube" ]; then
-    print_info ""
-    print_info "To access services, run: minikube service -n ajwa-services <service-name>"
-    print_info "Or get Minikube IP with: minikube ip"
-fi
+echo ""
+print_info "Calico Status:"
+kubectl get pods -n calico-system
 
-print_info ""
-print_info "Useful Commands:"
-print_info "  - View logs: kubectl logs -f <pod-name> -n ajwa-services"
-print_info "  - View pods: kubectl get pods -n ajwa-services"
-print_info "  - View services: kubectl get svc -n ajwa-services"
-print_info "  - Delete deployment: kubectl delete -f k8s/"
-print_info ""
-print_success "Setup completed successfully!"
+#############################################
+# Summary and Next Steps
+#############################################
+echo ""
+print_header "Setup Complete!"
+echo ""
 
+print_success "Master node initialized successfully!"
+print_info "Cluster Endpoint: https://$NODE_IP:6443"
+print_info "Pod Network CIDR: $POD_NETWORK_CIDR"
+print_info "CNI: Calico $CALICO_VERSION"
+echo ""
+
+print_header "Join Command for Worker Nodes"
+echo ""
+print_warning "Copy and run this command on WORKER nodes:"
+echo ""
+echo "----------------------------------------"
+cat $JOIN_COMMAND_FILE | grep "kubeadm join"
+echo "----------------------------------------"
+echo ""
+
+print_info "Join command also saved to: $JOIN_COMMAND_FILE"
+echo ""
+
+print_header "Useful Commands"
+echo ""
+echo "  # View cluster info"
+echo "  kubectl cluster-info"
+echo ""
+echo "  # View nodes"
+echo "  kubectl get nodes -o wide"
+echo ""
+echo "  # View all pods"
+echo "  kubectl get pods --all-namespaces"
+echo ""
+echo "  # View Calico status"
+echo "  kubectl get pods -n calico-system"
+echo ""
+echo "  # Generate new join command (if expired)"
+echo "  kubeadm token create --print-join-command"
+echo ""
+echo "  # View cluster tokens"
+echo "  kubeadm token list"
+echo ""
+
+print_header "Next Steps"
+echo ""
+print_info "1. Copy the join command from above"
+print_info "2. Run prerequisites.sh on worker nodes"
+print_info "3. Run worker-node.sh with join command on worker nodes"
+print_info "4. Verify nodes joined: kubectl get nodes"
+echo ""
+
+print_success "Master node setup completed successfully!"
+print_info "Log file: $LOG_FILE"
+echo ""
