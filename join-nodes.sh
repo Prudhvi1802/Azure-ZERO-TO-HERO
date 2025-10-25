@@ -2,7 +2,8 @@
 #############################################
 # Kubernetes Node Join Automation Script
 # Automates joining worker nodes to cluster
-# Ubuntu 25.04 LTS
+# Ubuntu 24.04 LTS (also works on 20.04/22.04)
+# Alternative to worker-node.sh with auto-fetch capability
 #############################################
 
 set -e
@@ -24,6 +25,11 @@ function print_header() { echo -e "${BLUE}━━━ $1 ━━━${NC}"; }
 print_header "Kubernetes Worker Node Join Automation"
 print_info "Timestamp: $(date)"
 echo ""
+
+# Configuration
+SKIP_VERSION_CHECK=${SKIP_VERSION_CHECK:-false}
+RESET_NODE=${RESET_NODE:-false}
+SSH_USER=${SSH_USER:-root}
 
 #############################################
 # Pre-flight Checks
@@ -60,94 +66,80 @@ if [ "$PREREQ_OK" = false ]; then
     exit 1
 fi
 
-# Check if node already joined
+# Check if node already joined (non-interactive)
 if [ -f /etc/kubernetes/kubelet.conf ]; then
-    print_warning "This node appears to be already part of a cluster"
-    read -p "Do you want to reset and rejoin? (yes/no): " RESET_CHOICE
-    if [ "$RESET_CHOICE" = "yes" ]; then
-        print_info "Resetting node..."
+    if [[ "$RESET_NODE" == "true" ]]; then
+        print_warning "Node already joined. Resetting (RESET_NODE=true)..."
         kubeadm reset -f
         rm -rf /etc/kubernetes /var/lib/kubelet ~/.kube
         print_success "Node reset complete"
     else
-        print_info "Exiting without changes"
-        exit 0
+        print_error "This node appears to be already part of a cluster"
+        print_info "Set RESET_NODE=true to reset and rejoin"
+        exit 1
     fi
 fi
 
 #############################################
-# Get Master Node Information
+# Get Join Command
 #############################################
-print_header "Master Node Configuration"
+print_header "Join Command Configuration"
 
-# Check if join command provided as argument
+# Determine how to get join command
 if [ -n "$1" ]; then
-    if [[ "$1" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-        # First argument is an IP address
+    if [[ "$1" =~ ^kubeadm\ join ]]; then
+        # Full join command provided as arguments
+        JOIN_COMMAND="$@"
+        print_info "Using join command from arguments"
+    elif [[ "$1" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        # Master IP provided - try to fetch via SSH
         MASTER_IP="$1"
-        print_info "Master IP: $MASTER_IP"
+        print_info "Master IP provided: $MASTER_IP"
+        print_info "Attempting to fetch join command via SSH (user: $SSH_USER)..."
         
-        # Try to fetch join command from master
-        print_info "Attempting to retrieve join command from master node..."
-        print_warning "This requires SSH access to the master node"
-        
-        read -p "Enter SSH username for master node [default: root]: " SSH_USER
-        SSH_USER="${SSH_USER:-root}"
-        
-        print_info "Trying to fetch join command via SSH..."
-        if ssh -o ConnectTimeout=10 -o StrictHostKeyChecking=no $SSH_USER@$MASTER_IP "test -f /tmp/join-command.sh" 2>/dev/null; then
-            JOIN_COMMAND=$(ssh -o StrictHostKeyChecking=no $SSH_USER@$MASTER_IP "cat /tmp/join-command.sh | grep 'kubeadm join'" 2>/dev/null)
+        # Try to fetch from master
+        if command -v ssh &> /dev/null; then
+            JOIN_COMMAND=$(ssh -o ConnectTimeout=10 -o StrictHostKeyChecking=no $SSH_USER@$MASTER_IP "cat /tmp/join-command.sh 2>/dev/null | grep 'kubeadm join'" 2>/dev/null || true)
+            
             if [ -n "$JOIN_COMMAND" ]; then
-                print_success "Join command retrieved from master node"
+                print_success "Join command retrieved from master via SSH"
             else
                 print_error "Could not retrieve join command from master"
-                print_info "Please ensure master-node.sh was run successfully on master"
+                print_info "Ensure SSH access is configured and master-node.sh was run"
+                print_info ""
+                print_info "Alternative: Provide join command directly:"
+                print_info "  $0 kubeadm join $MASTER_IP:6443 --token <token> ..."
                 exit 1
             fi
         else
-            print_warning "Could not access /tmp/join-command.sh on master"
-            print_info "Generating new join token from master..."
-            
-            JOIN_COMMAND=$(ssh -o StrictHostKeyChecking=no $SSH_USER@$MASTER_IP "kubeadm token create --print-join-command" 2>/dev/null)
-            if [ -n "$JOIN_COMMAND" ]; then
-                print_success "New join command generated from master"
-            else
-                print_error "Could not generate join command from master"
-                print_info "Please manually paste the join command below"
-                read -p "> " JOIN_COMMAND
-            fi
-        fi
-    else
-        # First argument is the full join command
-        JOIN_COMMAND="$@"
-        print_info "Using join command from arguments"
-    fi
-else
-    # No arguments provided, ask for join command
-    print_info "Please provide either:"
-    print_info "  1. Master node IP address (will attempt to fetch join command)"
-    print_info "  2. Complete join command from master node"
-    echo ""
-    read -p "Enter master IP or paste join command: " USER_INPUT
-    
-    if [[ "$USER_INPUT" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-        # User provided IP, try to fetch join command
-        MASTER_IP="$USER_INPUT"
-        print_info "Testing connectivity to master: $MASTER_IP"
-        
-        if ping -c 2 -W 5 $MASTER_IP &> /dev/null; then
-            print_success "Master node is reachable"
-        else
-            print_error "Cannot reach master node at $MASTER_IP"
+            print_error "SSH not available for auto-fetch"
+            print_info "Install SSH or provide join command directly:"
+            print_info "  $0 kubeadm join $MASTER_IP:6443 --token <token> ..."
             exit 1
         fi
-        
-        print_warning "Please paste the join command manually:"
-        read -p "> " JOIN_COMMAND
     else
-        # User provided full join command
-        JOIN_COMMAND="$USER_INPUT"
+        print_error "Invalid argument. Expected: master IP or full join command"
+        exit 1
     fi
+elif [ -n "$JOIN_COMMAND" ]; then
+    # Join command from environment variable
+    print_info "Using join command from JOIN_COMMAND environment variable"
+else
+    # No join command provided
+    print_error "No join command or master IP provided"
+    print_info ""
+    print_info "Usage:"
+    print_info "  Method 1 - Provide join command:"
+    print_info "    $0 kubeadm join <master-ip>:6443 --token <token> ..."
+    print_info ""
+    print_info "  Method 2 - Auto-fetch via SSH:"
+    print_info "    $0 <master-ip>"
+    print_info "    SSH_USER=ubuntu $0 <master-ip>"
+    print_info ""
+    print_info "  Method 3 - Environment variable:"
+    print_info "    JOIN_COMMAND='kubeadm join ...' $0"
+    print_info ""
+    exit 1
 fi
 
 #############################################
@@ -156,14 +148,14 @@ fi
 print_header "Validating Join Command"
 
 if [ -z "$JOIN_COMMAND" ]; then
-    print_error "No join command provided"
+    print_error "No join command available"
     exit 1
 fi
 
 # Validate join command format
 if [[ ! "$JOIN_COMMAND" =~ ^kubeadm\ join ]]; then
     print_error "Invalid join command format"
-    print_error "Expected format: kubeadm join <master-ip>:6443 --token <token> --discovery-token-ca-cert-hash sha256:<hash>"
+    print_error "Expected: kubeadm join <master-ip>:6443 --token <token> --discovery-token-ca-cert-hash sha256:<hash>"
     exit 1
 fi
 
