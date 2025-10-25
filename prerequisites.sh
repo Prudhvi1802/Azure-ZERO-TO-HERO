@@ -2,7 +2,7 @@
 #############################################
 # Kubernetes Prerequisites Setup Script
 # Run this on BOTH master and worker nodes
-# Ubuntu 25.04 LTS
+# Ubuntu 24.04 LTS (also works on 20.04/22.04)
 #############################################
 
 set -e
@@ -55,16 +55,21 @@ fi
 print_info "System: $(lsb_release -d | cut -f2)"
 print_info "Kernel: $(uname -r)"
 
-# Verify Ubuntu version
+# Verify Ubuntu version (non-interactive)
+SKIP_VERSION_CHECK=${SKIP_VERSION_CHECK:-false}
+
 if [ -f /etc/os-release ]; then
     . /etc/os-release
-    if [[ "$VERSION_ID" != "25.04" ]]; then
-        print_warning "This script is optimized for Ubuntu 25.04"
-        print_warning "Current version: $VERSION_ID"
-        read -p "Continue anyway? (yes/no): " CONTINUE
-        if [ "$CONTINUE" != "yes" ]; then
-            exit 1
+    if [[ "$VERSION_ID" != "24.04" ]] && [[ "$VERSION_ID" != "22.04" ]] && [[ "$VERSION_ID" != "20.04" ]]; then
+        if [[ "$SKIP_VERSION_CHECK" == "true" ]]; then
+            print_warning "Ubuntu $VERSION_ID detected. Continuing anyway (SKIP_VERSION_CHECK=true)"
+        else
+            print_warning "Ubuntu $VERSION_ID detected. Recommended: 24.04, 22.04, or 20.04 LTS"
+            print_warning "Set SKIP_VERSION_CHECK=true to bypass this check"
+            print_info "Continuing with current version..."
         fi
+    else
+        print_success "Ubuntu $VERSION_ID detected"
     fi
 fi
 
