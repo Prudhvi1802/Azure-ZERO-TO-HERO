@@ -2,7 +2,7 @@
 #############################################
 # Kubernetes Worker Node Setup Script
 # Run this ONLY on worker nodes
-# Ubuntu 25.04 LTS
+# Ubuntu 24.04 LTS (also works on 20.04/22.04)
 #############################################
 
 set -e
@@ -19,6 +19,9 @@ function print_info() { echo -e "${CYAN}ℹ $1${NC}"; }
 function print_warning() { echo -e "${YELLOW}⚠ $1${NC}"; }
 function print_error() { echo -e "${RED}✗ $1${NC}"; }
 
+# Configuration (can be overridden with env vars)
+SKIP_VERSION_CHECK=${SKIP_VERSION_CHECK:-false}
+
 print_info "=========================================="
 print_info "Kubernetes Worker Node Setup"
 print_info "=========================================="
@@ -29,18 +32,20 @@ if [ "$EUID" -ne 0 ]; then
     exit 1
 fi
 
-# Check Ubuntu version
+# Check Ubuntu version (non-interactive)
 print_info "Checking Ubuntu version..."
 if [ -f /etc/os-release ]; then
     . /etc/os-release
     print_info "OS: $NAME $VERSION"
-    if [[ "$VERSION_ID" != "25.04" ]]; then
-        print_warning "This script is optimized for Ubuntu 25.04"
-        print_warning "Current version: $VERSION_ID"
-        read -p "Continue anyway? (yes/no): " CONTINUE
-        if [ "$CONTINUE" != "yes" ]; then
-            exit 1
+    if [[ "$VERSION_ID" != "24.04" ]] && [[ "$VERSION_ID" != "22.04" ]] && [[ "$VERSION_ID" != "20.04" ]]; then
+        if [[ "$SKIP_VERSION_CHECK" == "true" ]]; then
+            print_warning "Ubuntu $VERSION_ID detected. Continuing anyway (SKIP_VERSION_CHECK=true)"
+        else
+            print_warning "Ubuntu $VERSION_ID detected. Recommended: 24.04, 22.04, or 20.04 LTS"
+            print_info "Continuing with current version..."
         fi
+    else
+        print_success "Ubuntu $VERSION_ID is supported"
     fi
 fi
 
@@ -55,24 +60,28 @@ NODE_IP=$(hostname -I | awk '{print $1}')
 print_info "Worker Node IP: $NODE_IP"
 print_info "Worker Node Hostname: $(hostname)"
 
-print_info ""
-print_warning "You need the join command from the master node"
-print_info "The join command looks like:"
-print_info "  kubeadm join <master-ip>:6443 --token <token> --discovery-token-ca-cert-hash sha256:<hash>"
-print_info ""
-
-# Check if join command provided as argument
+# Get join command (non-interactive - must be provided as argument or env var)
 if [ -n "$1" ]; then
-    print_info "Using join command from arguments"
+    # Join command provided as script arguments
     JOIN_COMMAND="$@"
+    print_info "Using join command from arguments"
+elif [ -n "$JOIN_COMMAND" ]; then
+    # Join command provided via environment variable
+    print_info "Using join command from JOIN_COMMAND environment variable"
 else
-    # Ask for join command
-    print_warning "Please paste the join command from the master node:"
-    read -p "> " JOIN_COMMAND
-fi
-
-if [ -z "$JOIN_COMMAND" ]; then
+    # No join command provided
     print_error "No join command provided"
+    print_info ""
+    print_info "Usage:"
+    print_info "  $0 <join-command>"
+    print_info "  OR"
+    print_info "  JOIN_COMMAND='kubeadm join ...' $0"
+    print_info ""
+    print_info "Example:"
+    print_info "  $0 kubeadm join 192.168.1.100:6443 --token abc123.xyz789 --discovery-token-ca-cert-hash sha256:abcd..."
+    print_info ""
+    print_info "Get join command from master node:"
+    print_info "  cat /tmp/join-command.sh"
     exit 1
 fi
 
