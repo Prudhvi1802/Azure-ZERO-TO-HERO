@@ -1,0 +1,64 @@
+---
+# Role with permissions for deployments
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: gitlab-deployer-role
+  namespace: production
+  labels:
+    app: gitlab-ci
+    purpose: deployment
+rules:
+  # Deployments permissions
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  
+  # ReplicaSets permissions (needed for rollout status)
+  - apiGroups: ["apps"]
+    resources: ["replicasets"]
+    verbs: ["get", "list", "watch"]
+  
+  # Pods permissions (for debugging and logs)
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+  
+  # Pods logs permissions
+  - apiGroups: [""]
+    resources: ["pods/log"]
+    verbs: ["get", "list"]
+  
+  # Services permissions
+  - apiGroups: [""]
+    resources: ["services"]
+    verbs: ["get", "list", "watch", "create", "update", "patch"]
+  
+  # ConfigMaps permissions
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list", "watch", "create", "update", "patch"]
+  
+  # Secrets permissions (if needed for deployment)
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "list", "watch"]
+
+---
+# RoleBinding to bind the role to the service account
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: gitlab-deployer-binding
+  namespace: production
+  labels:
+    app: gitlab-ci
+    purpose: deployment
+subjects:
+  - kind: ServiceAccount
+    name: gitlab-deployer
+    namespace: production
+roleRef:
+  kind: Role
+  name: gitlab-deployer-role
+  apiGroup: rbac.authorization.k8s.io

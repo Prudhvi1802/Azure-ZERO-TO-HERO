@@ -1,0 +1,10 @@
+---
+# Production namespace for application deployments
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: production
+  labels:
+    name: production
+    environment: production
+    managed-by: gitlab-ci

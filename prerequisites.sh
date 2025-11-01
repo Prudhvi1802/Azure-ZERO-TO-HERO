@@ -44,7 +44,7 @@ sudo dpkg --configure -a
 
 # 6. Update system manually
 sudo apt-get update
-sudo apt-get upgrade -y
+sudo apt-get upgrade
 
 # Check if running as root
 if [ "$EUID" -ne 0 ]; then 
@@ -75,13 +75,13 @@ fi
 
 # Update system
 print_info "Updating system packages..."
-apt-get update -y
-apt-get upgrade -y
+apt-get update
+apt-get upgrade
 print_success "System updated"
 
 # Install required packages
 print_info "Installing required packages..."
-apt-get install -y \
+apt-get install \
     apt-transport-https \
     ca-certificates \
     curl \
@@ -122,7 +122,7 @@ print_success "Sysctl configured"
 
 # Install containerd
 print_info "Installing containerd..."
-apt-get install -y containerd
+apt-get install containerd
 
 # Configure containerd
 mkdir -p /etc/containerd
@@ -147,7 +147,7 @@ print_success "Kubernetes repository added"
 
 # Install Kubernetes components
 print_info "Installing kubelet, kubeadm, and kubectl..."
-apt-get install -y kubelet kubeadm kubectl
+apt-get install kubelet kubeadm kubectl
 apt-mark hold kubelet kubeadm kubectl
 
 systemctl enable kubelet
